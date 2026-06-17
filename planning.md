@@ -19,7 +19,7 @@ Searches all of the listings data set for thrift items matching a description ba
 
 **Input parameters:**
 <!-- List each parameter, its type, and what it represents -->
-- `description` (str): Keywords describin what the user is looking for in a listing,
+- `description` (str): Keywords describing what the user is looking for in a listing,
 - `size` (str): Size string to filter by, case-insensitive ('M' = 'm')
 - `max_price` (float): Inclusive maximum price bound, if left empty then no price filter.
 
@@ -29,7 +29,7 @@ A list of listing dicts sorted by relevance score (highest first). Each dict con
 Empty list if there is no matches, doesn't throw exceptions.
 
 **What happens if it fails or returns nothing:**
-The agent checks if the returned list is empty. If it is, it sets `session["error"]` to "No listings found matchinig your description, size, and budget, Try broader keywords, a different size, or a higher price limit." and returns early without calling suggest_outfit or create_fit_card.
+The agent checks if the returned list is empty. If it is, it sets `session["error"]` to "No listings found matching your description, size, and budget. Try broader keywords, a different size, or a higher price limit." and returns early without calling suggest_outfit or create_fit_card.
 
 ---
 
@@ -41,27 +41,28 @@ Given the thrifted item and the user's wardrobe, calls the LLM to suggest 1-2 co
 **Input parameters:**
 <!-- List each parameter, its type, and what it represents -->
 - `new_item` (dict): A listing dict for the item the user is considering (from search_listings)
-- `wardrobe` (dict): A wardrobe dict5 with an `'items'` key containing a list of the wardrobe item dicts. Can be empty.
+- `wardrobe` (dict): A wardrobe dict with an `'items'` key containing a list of the wardrobe item dicts. Can be empty.
 
 **What it returns:**
 A string with 1-2 outfit suggestions. If the wardrobe is empty, generalizes styling advice and how to wear the outfit.
 
 **What happens if it fails or returns nothing:**
-If `wardrob['items']` is empty, the LLM is prompted for general styling ideas rather than specific combinationns. The agent continues to create_fit_card with this general style advice, doesn't just stop.
+If `wardrobe['items']` is empty, the LLM is prompted for general styling ideas rather than specific combinations. The agent continues to create_fit_card with this general style advice, doesn't just stop.
 
 ---
 
 ### Tool 3: create_fit_card
 
 **What it does:**
-Takes the outfit suggestion string and the new item dict and prompts the LLM to write a social media style caption capturing the outfit's vibe. Uses higher LLM temprature so the output varies each time.
+Takes the outfit suggestion string and the new item dict and prompts the LLM to write a social media style caption capturing the outfit's vibe. Uses higher LLM temperature so the output varies each time.
 
 **Input parameters:**
 <!-- List each parameter, its type, and what it represents -->
-- `outfit` (...): The outfit suggestion string returned by `suggest_outift()`
+- `outfit` (str): The outfit suggestion string returned by `suggest_outfit()`
+- `new_item` (dict): The listing dict for the thrifted item (id, title, price, platform, etc.)
 
 **What it returns:**
-A 2-4 sentence caption string that feels like a real OOTD post, menttions the items name, price, and platform all naturally and not repetitively.
+A 2-4 sentence caption string that feels like a real OOTD post, mentions the item's name, price, and platform all naturally and not repetitively.
 
 **What happens if it fails or returns nothing:**
 If `outfit` is empty, returns the string "Error: outfit description is missing — cannot generate a fit card." Doesn't ever throw an exception.
@@ -100,6 +101,8 @@ before the planning loop runs and updated after each tool call:
 ```python
 session = {
     "query": str,              # original user message
+    "parsed": dict,            # extracted description, size, max_price
+    "search_results": list,    # all matching listing dicts from search_listings
     "wardrobe": dict,          # loaded once at start (example or empty)
     "selected_item": dict,     # set after search_listings succeeds
     "outfit_suggestion": str,  # set after suggest_outfit runs
@@ -223,9 +226,9 @@ Agent sets `session["selected_item"] = results[0]`.
 **Step 2:**
 Agent calls `suggest_outfit(session["selected_item"], session["wardrobe"])`.
 Wardrobe contains baggy jeans and chunky sneakers. LLM is prompted with the item
-details and wardrobe contents. Returns: "Pair this faded band tee with your wide-leg
-jeans and platform Docs for a 90s grunge look. Roll the sleeves once and tuck the
-front corner slightly for shape."
+details and wardrobe contents. Returns: "Pair this faded band tee with your baggy
+dark-wash jeans and chunky white sneakers for a 90s grunge look. Roll the sleeves
+once and tuck the front corner slightly for shape."
 Agent sets `session["outfit_suggestion"]` = this string.
 
 **Step 3:**
