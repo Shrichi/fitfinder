@@ -94,8 +94,74 @@ def run_agent(query: str, wardrobe: dict) -> dict:
     """
     # TODO: implement the planning loop
     session = _new_session(query, wardrobe)
-    session["error"] = "Planning loop not yet implemented."
+
+    # ── Step 2: parse the query ────────────────────────────────────
+    # Size: "size M", "size S/M", "size 10", etc.
+    size_match = re.search(
+        r'\bsize\s+([A-Z]{1,3}(?:/[A-Z]{1,3})?|\d+(?:\.\d+)?)\b',
+        query,
+        re.IGNORECASE,
+    )
+    size = size_match.group(1).upper() if size_match else None
+
+    # Price ceiling: "under $30", "below 40", "$25", "max $50", "up to $60"
+    price_match = re.search(
+        r'(?:under|below|max|up\s+to)?\s*\$\s*(\d+(?:\.\d+)?)'
+        r'|(?:under|below|max|up\s+to)\s+(\d+(?:\.\d+)?)',
+        query,
+        re.IGNORECASE,
+    )
+    if price_match:
+        raw = price_match.group(1) or price_match.group(2)
+        max_price = float(raw)
+    else:
+        max_price = None
+
+    # Description: strip size + price fragments, then clean up filler words
+    description = query
+    for pat in (
+        r'\bsize\s+[A-Z]{1,3}(?:/[A-Z]{1,3})?\b',
+        r'\bsize\s+\d+(?:\.\d+)?\b',
+        r'(?:under|below|max|up\s+to)?\s*\$\s*\d+(?:\.\d+)?',
+        r'(?:under|below|max|up\s+to)\s+\d+(?:\.\d+)?',
+        r"\b(i'?m|i\s+am|looking\s+for|want|need|find\s+me|a|an|the|in|for)\b",
+    ):
+        description = re.sub(pat, ' ', description, flags=re.IGNORECASE)
+    description = ' '.join(description.split())  # collapse whitespace
+
+    session["parsed"] = {
+        "description": description,
+        "size": size,
+        "max_price": max_price,
+    }
+
+    # ── Step 3: search ─────────────────────────────────────────────
+    results = search_listings(description, size=size, max_price=max_price)
+    session["search_results"] = results
+
+    if not results:
+        session["error"] = (
+            "No listings found matching your description, size, and budget. "
+            "Try broader keywords, a different size, or a higher price limit."
+        )
+        return session
+
+    # ── Step 4: pick top result ────────────────────────────────────
+    session["selected_item"] = results[0]
+
+    # ── Step 5: outfit suggestion ──────────────────────────────────
+    session["outfit_suggestion"] = suggest_outfit(
+        session["selected_item"], session["wardrobe"]
+    )
+
+    # ── Step 6: fit card ───────────────────────────────────────────
+    session["fit_card"] = create_fit_card(
+        session["outfit_suggestion"], session["selected_item"]
+    )
+
+    # ── Step 7: return ─────────────────────────────────────────────
     return session
+
 
 
 # ── CLI test ──────────────────────────────────────────────────────────────────
